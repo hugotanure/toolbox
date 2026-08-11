@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Data Toolbox — Text diff, JSON and YAML tools</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%234f7cff'/%3E%3Ctext x='8' y='12' font-size='10' text-anchor='middle' fill='white' font-family='monospace'%3E%7B%7D%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="app-title">
+      <h1>Data Toolbox</h1>
+      <p class="app-subtitle">Text diff · JSON · YAML</p>
+    </div>
+    <div class="app-header-right">
+      <span class="privacy-badge" title="All processing happens in your browser. Nothing is sent or stored externally.">
+        <span class="privacy-dot" aria-hidden="true"></span>
+        100% local — your data never leaves this browser
+      </span>
+      <button type="button" id="btn-theme" class="btn btn-ghost" aria-pressed="false" title="Switch between light and dark theme">
+        <span id="theme-icon" aria-hidden="true">🌙</span>
+        <span id="theme-label">Dark theme</span>
+      </button>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Tools">
+    <button type="button" role="tab" id="tab-diff" aria-controls="panel-diff" aria-selected="true" class="tab" tabindex="0">Compare texts</button>
+    <button type="button" role="tab" id="tab-json" aria-controls="panel-json" aria-selected="false" class="tab" tabindex="-1">JSON</button>
+    <button type="button" role="tab" id="tab-convert" aria-controls="panel-convert" aria-selected="false" class="tab" tabindex="-1">JSON ⇄ YAML</button>
+  </nav>
+
+  <main>
+    <!-- ============ TAB 1: TEXT DIFF ============ -->
+    <section id="panel-diff" role="tabpanel" aria-labelledby="tab-diff" class="panel">
+      <div class="toolbar" role="group" aria-label="Diff actions">
+        <button type="button" id="btn-compare" class="btn btn-primary" title="Compare the two texts (Ctrl+Enter)">Compare</button>
+        <button type="button" id="btn-swap" class="btn" title="Swap the contents of the two editors">Swap sides</button>
+        <button type="button" id="btn-clear-diff" class="btn" title="Clear both editors and the result">Clear</button>
+        <button type="button" id="btn-example-diff" class="btn" title="Fill the editors with an example">Load example</button>
+        <button type="button" id="btn-copy-original" class="btn" title="Copy the original text">Copy original</button>
+        <button type="button" id="btn-copy-altered" class="btn" title="Copy the changed text">Copy changed</button>
+      </div>
+
+      <fieldset class="options">
+        <legend>Comparison options</legend>
+        <label class="opt"><input type="checkbox" id="opt-ignore-case"> Ignore case</label>
+        <label class="opt"><input type="checkbox" id="opt-ignore-space"> Ignore whitespace</label>
+        <label class="opt"><input type="checkbox" id="opt-wrap" checked> Wrap long lines</label>
+        <label class="opt"><input type="checkbox" id="opt-sync-scroll" checked> Synchronize scrolling</label>
+      </fieldset>
+
+      <div class="editor-grid">
+        <div class="editor-block">
+          <label for="diff-original">Original text</label>
+          <textarea id="diff-original" class="editor" spellcheck="false"
+                    placeholder="Paste the original text here…"></textarea>
+        </div>
+        <div class="editor-block">
+          <label for="diff-altered">Changed text</label>
+          <textarea id="diff-altered" class="editor" spellcheck="false"
+                    placeholder="Paste the changed text here…"></textarea>
+        </div>
+      </div>
+
+      <div class="result-header">
+        <fieldset class="view-mode" role="radiogroup" aria-label="View mode">
+          <legend class="sr-only">View mode</legend>
+          <label class="opt"><input type="radio" name="viewmode" id="view-side" value="side" checked> Side by side</label>
+          <label class="opt"><input type="radio" name="viewmode" id="view-inline" value="inline"> Inline diff</label>
+        </fieldset>
+        <div class="legend" aria-label="Legend">
+          <span class="legend-item"><span class="swatch swatch-added" aria-hidden="true">+</span> Green: added</span>
+          <span class="legend-item"><span class="swatch swatch-removed" aria-hidden="true">−</span> Red: removed</span>
+        </div>
+      </div>
+
+      <div id="diff-summary" class="summary" hidden>
+        <span class="stat"><strong id="sum-added">0</strong> characters added</span>
+        <span class="stat"><strong id="sum-removed">0</strong> characters removed</span>
+        <span class="stat"><strong id="sum-blocks">0</strong> changed blocks</span>
+        <span class="stat"><strong id="sum-lines">0</strong> changed lines</span>
+        <span class="stat stat-ok" id="sum-identical" hidden>✓ The texts are identical</span>
+      </div>
+
+      <div id="diff-empty" class="empty-state">
+        <p>No comparison yet.</p>
+        <p>Paste the texts above and click <strong>Compare</strong> (or press Ctrl+Enter).</p>
+      </div>
+
+      <div id="diff-side" class="diff-side" hidden>
+        <div class="diff-pane">
+          <h2 class="pane-title">Original</h2>
+          <div id="diff-pane-left" class="diff-result" tabindex="0" role="region" aria-label="Result: original text with removals highlighted"></div>
+        </div>
+        <div class="diff-pane">
+          <h2 class="pane-title">Changed</h2>
+          <div id="diff-pane-right" class="diff-result" tabindex="0" role="region" aria-label="Result: changed text with additions highlighted"></div>
+        </div>
+      </div>
+
+      <div id="diff-inline-wrap" hidden>
+        <h2 class="pane-title">Inline diff</h2>
+        <div id="diff-inline" class="diff-result" tabindex="0" role="region" aria-label="Result: inline diff"></div>
+      </div>
+    </section>
+
+    <!-- ============ TAB 2: JSON ============ -->
+    <section id="panel-json" role="tabpanel" aria-labelledby="tab-json" class="panel" hidden>
+      <div class="toolbar" role="group" aria-label="JSON actions">
+        <button type="button" id="btn-json-validate" class="btn btn-primary" title="Validate the JSON (Ctrl+Enter)">Validate</button>
+        <button type="button" id="btn-json-format" class="btn" title="Format the JSON with the chosen indentation (Ctrl+Shift+F)">Format</button>
+        <button type="button" id="btn-json-minify" class="btn" title="Remove unnecessary spaces and line breaks">Minify</button>
+        <button type="button" id="btn-json-copy" class="btn" title="Copy the editor content">Copy</button>
+        <button type="button" id="btn-json-clear" class="btn" title="Clear the editor">Clear</button>
+        <button type="button" id="btn-json-example" class="btn" title="Fill with an example JSON">Load example</button>
+        <button type="button" id="btn-json-open" class="btn" title="Open a .json file from your computer">Open file</button>
+        <button type="button" id="btn-json-download" class="btn" title="Download the content as a .json file">Download JSON</button>
+        <label class="select-label" for="json-indent">Indentation
+          <select id="json-indent" title="Indentation used when formatting">
+            <option value="2" selected>2 spaces</option>
+            <option value="4">4 spaces</option>
+            <option value="tab">Tab</option>
+          </select>
+        </label>
+      </div>
+
+      <input type="file" id="json-file" accept=".json,application/json" class="sr-only" aria-hidden="true" tabindex="-1">
+
+      <div class="editor-block">
+        <label for="json-input">JSON document</label>
+        <textarea id="json-input" class="editor editor-tall" spellcheck="false"
+                  placeholder='Paste your JSON here, for example: {"name": "Ana", "age": 30}'></textarea>
+      </div>
+
+      <div class="statusbar">
+        <span id="json-status" class="badge badge-neutral">Awaiting validation</span>
+        <span class="stat"><strong id="json-stat-lines">0</strong> lines</span>
+        <span class="stat"><strong id="json-stat-chars">0</strong> characters</span>
+        <span class="stat">≈ <strong id="json-stat-bytes">0</strong> bytes</span>
+      </div>
+
+      <div id="json-message" class="message" hidden></div>
+    </section>
+
+    <!-- ============ TAB 3: JSON <-> YAML ============ -->
+    <section id="panel-convert" role="tabpanel" aria-labelledby="tab-convert" class="panel" hidden>
+      <p class="note">YAML comments cannot be preserved: when converting YAML → JSON and then JSON → YAML, comments are lost.</p>
+
+      <div class="convert-grid">
+        <div class="editor-block">
+          <div class="mini-toolbar" role="group" aria-label="JSON panel actions">
+            <span class="mini-title">JSON</span>
+            <button type="button" id="btn-conv-json-validate" class="btn btn-sm" title="Validate this panel's JSON">Validate</button>
+            <button type="button" id="btn-conv-json-copy" class="btn btn-sm" title="Copy the JSON">Copy</button>
+            <button type="button" id="btn-conv-json-open" class="btn btn-sm" title="Open a .json file">Open file</button>
+            <button type="button" id="btn-conv-json-download" class="btn btn-sm" title="Download as a .json file">Download</button>
+            <label class="select-label select-sm" for="conv-json-indent">Indentation
+              <select id="conv-json-indent" title="Indentation of the generated JSON">
+                <option value="2" selected>2 spaces</option>
+                <option value="4">4 spaces</option>
+                <option value="tab">Tab</option>
+              </select>
+            </label>
+          </div>
+          <label class="sr-only" for="conv-json">JSON document</label>
+          <textarea id="conv-json" class="editor editor-tall" spellcheck="false"
+                    placeholder='{"example": true}'></textarea>
+          <div class="statusbar statusbar-sm">
+            <span class="stat"><strong id="conv-json-lines">0</strong> lines</span>
+            <span class="stat"><strong id="conv-json-chars">0</strong> characters</span>
+          </div>
+        </div>
+
+        <div class="convert-actions" role="group" aria-label="Conversion actions">
+          <button type="button" id="btn-j2y" class="btn btn-primary" title="Convert the JSON on the left to YAML (Ctrl+Enter)">JSON → YAML</button>
+          <button type="button" id="btn-y2j" class="btn btn-primary" title="Convert the YAML on the right to JSON">YAML → JSON</button>
+          <button type="button" id="btn-conv-swap" class="btn" title="Swap the contents of the two panels">Swap contents</button>
+          <button type="button" id="btn-conv-clear" class="btn" title="Clear both panels">Clear all</button>
+        </div>
+
+        <div class="editor-block">
+          <div class="mini-toolbar" role="group" aria-label="YAML panel actions">
+            <span class="mini-title">YAML</span>
+            <button type="button" id="btn-conv-yaml-validate" class="btn btn-sm" title="Validate this panel's YAML">Validate</button>
+            <button type="button" id="btn-conv-yaml-copy" class="btn btn-sm" title="Copy the YAML">Copy</button>
+            <button type="button" id="btn-conv-yaml-open" class="btn btn-sm" title="Open a .yaml or .yml file">Open file</button>
+            <button type="button" id="btn-conv-yaml-download" class="btn btn-sm" title="Download as a .yaml file">Download</button>
+          </div>
+          <label class="sr-only" for="conv-yaml">YAML document</label>
+          <textarea id="conv-yaml" class="editor editor-tall" spellcheck="false"
+                    placeholder="example: true"></textarea>
+          <div class="statusbar statusbar-sm">
+            <span class="stat"><strong id="conv-yaml-lines">0</strong> lines</span>
+            <span class="stat"><strong id="conv-yaml-chars">0</strong> characters</span>
+          </div>
+        </div>
+      </div>
+
+      <input type="file" id="conv-json-file" accept=".json,application/json" class="sr-only" aria-hidden="true" tabindex="-1">
+      <input type="file" id="conv-yaml-file" accept=".yaml,.yml,application/yaml,text/yaml" class="sr-only" aria-hidden="true" tabindex="-1">
+
+      <div id="conv-message" class="message" hidden></div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <p>Data Toolbox — works fully offline. No data is sent or stored outside this browser.</p>
+  </footer>
+
+  <div id="live-region" class="sr-only" role="status" aria-live="polite"></div>
+  <div id="toast-container" aria-hidden="true"></div>
+
+  <script src="vendor/diff.min.js"></script>
+  <script src="vendor/js-yaml.min.js"></script>
+  <script src="js/core.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
